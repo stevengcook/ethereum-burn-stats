@@ -42,8 +42,9 @@ var constantinopleBlock = uint64(7_280_000)
 var byzantiumBlock = uint64(4_370_000)
 
 var globalBlockStats = BlockStatsMap{v: make(map[uint64]sql.BlockStats)}
-var globalTotalBurned = TotalCounter{} //v: big.Int}
-var globalTotalTips = TotalCounter{}   //v: big.Int}
+var globalTotalBurned = TotalCounter{}   //v: big.Int}
+var globalTotalIssuance = TotalCounter{} //v: big.Int}
+var globalTotalTips = TotalCounter{}     //v: big.Int}
 
 type Hub interface {
 	ListenAndServe(addr string) error
@@ -97,6 +98,10 @@ func New(
 	globalTotalBurned.mu.Lock()
 	globalTotalBurned.v = big.NewInt(0)
 	globalTotalBurned.mu.Unlock()
+
+	globalTotalIssuance.mu.Lock()
+	globalTotalIssuance.v = big.NewInt(0)
+	globalTotalIssuance.mu.Unlock()
 
 	globalTotalTips.mu.Lock()
 	globalTotalTips.v = big.NewInt(0)
@@ -374,17 +379,21 @@ func InitializeMissingBlocks(rpcClient *rpcClient, db *sql.Database, londonBlock
 
 	allBlockStats = []sql.BlockStats{}
 
-	burned, tips, err := db.GetTotals()
+	burned, issuance, tips, err := db.GetTotals()
 	if err != nil {
 		log.Errorf("Error getting totals from database:%v", err)
 		return
 	}
 
-	log.Printf("Totals: %s burned and %s tips\n", burned.String(), tips.String())
+	log.Printf("Totals: %s burned, %s issuance, and %s tips\n", burned.String(), issuance.String(), tips.String())
 
 	globalTotalBurned.mu.Lock()
 	globalTotalBurned.v.Add(globalTotalBurned.v, burned)
 	globalTotalBurned.mu.Unlock()
+
+	globalTotalIssuance.mu.Lock()
+	globalTotalIssuance.v.Add(globalTotalIssuance.v, issuance)
+	globalTotalIssuance.mu.Unlock()
 
 	globalTotalTips.mu.Lock()
 	globalTotalTips.v.Add(globalTotalTips.v, tips)
@@ -569,11 +578,15 @@ func getTotals(
 		burned := hexutil.EncodeBig(globalTotalBurned.v)
 		globalTotalBurned.mu.Unlock()
 
+		globalTotalIssuance.mu.Lock()
+		issuance := hexutil.EncodeBig(globalTotalIssuance.v)
+		globalTotalIssuance.mu.Unlock()
+
 		globalTotalTips.mu.Lock()
 		tipped := hexutil.EncodeBig(globalTotalTips.v)
 		globalTotalTips.mu.Unlock()
 
-		return json.RawMessage(fmt.Sprintf("{\"burned\": \"%s\", \"tipped\": \"%s\"}", burned, tipped)), nil
+		return json.RawMessage(fmt.Sprintf("{\"burned\": \"%s\", \"issuance\": \"%s\", \"tipped\": \"%s\"}", burned, issuance, tipped)), nil
 	}
 }
 
