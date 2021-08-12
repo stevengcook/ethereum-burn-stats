@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	gethRPC "github.com/ethereum/go-ethereum/rpc"
@@ -260,6 +261,11 @@ func (h *Hub) initializeGrpcWebSocket(gethEndpointWebsocket string) error {
 					latestBlocks.addBlock(blockStats)
 				}
 
+				err = updateGlobalTotals()
+				if err != nil {
+					log.Errorf("Error updating total stats: %v", err)
+				}
+
 				h.db.AddBlock(blockStats, blockStatsPercentiles)
 				latestBlock.updateBlockNumber(blockNumber)
 
@@ -452,7 +458,7 @@ func (h *Hub) initializeMissingBlocks(londonBlock uint64, latestBlockNumber uint
 		return fmt.Errorf("error getting totals from database:%v", err)
 	}
 
-	log.Printf("Totals: %s burned, %s issuance, and %s tips\n", burned.String(), issuance.String(), tips.String())
+	log.Infof("totals: %s burned, %s issuance, and %s tips", burned.String(), issuance.String(), tips.String())
 
 	globalTotalBurned.mu.Lock()
 	globalTotalBurned.v.Add(globalTotalBurned.v, burned)
@@ -940,18 +946,18 @@ func (h *Hub) updateBlockStats(blockNumber uint64) (sql.BlockStats, []sql.BlockS
 	globalBlockStats.v[blockNumber] = blockStats
 	globalBlockStats.mu.Unlock()
 
-	globalTotalBurned.mu.Lock()
-	globalTotalBurned.v.Add(globalTotalBurned.v, blockBurned)
-	globalTotalBurned.mu.Unlock()
+	//globalTotalBurned.mu.Lock()
+	//globalTotalBurned.v.Add(globalTotalBurned.v, blockBurned)
+	//globalTotalBurned.mu.Unlock()
 
-	globalTotalIssuance.mu.Lock()
-	globalTotalIssuance.v.Add(globalTotalIssuance.v, &blockReward)
-	globalTotalIssuance.v.Sub(globalTotalIssuance.v, blockBurned)
-	globalTotalIssuance.mu.Unlock()
+	//globalTotalIssuance.mu.Lock()
+	//globalTotalIssuance.v.Add(globalTotalIssuance.v, &blockReward)
+	//globalTotalIssuance.v.Sub(globalTotalIssuance.v, blockBurned)
+	//globalTotalIssuance.mu.Unlock()
 
-	globalTotalTips.mu.Lock()
-	globalTotalTips.v.Add(globalTotalTips.v, blockTips)
-	globalTotalTips.mu.Unlock()
+	//globalTotalTips.mu.Lock()
+	//globalTotalTips.v.Add(globalTotalTips.v, blockTips)
+	//globalTotalTips.mu.Unlock()
 
 	duration := time.Since(start) / time.Millisecond
 	log.Printf("block: %d, blockHex: %s, timestamp: %d, gas_target: %s, gas_used: %s, rewards: %s, tips: %s, baseFee: %s, burned: %s, transactions: %s, ptime: %dms\n", blockNumber, blockNumberHex, header.Time, gasTarget.String(), gasUsed.String(), blockReward.String(), blockTips.String(), baseFee.String(), blockBurned.String(), transactionCount.String(), duration)
@@ -1027,4 +1033,64 @@ func min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func updateGlobalTotals() error {
+	start := time.Now()
+
+	totalBurned := big.NewInt(0)
+	totalIssuance := big.NewInt(0)
+	totalTips := big.NewInt(0)
+
+	globalBlockStats.mu.Lock()
+	for _, block := range globalBlockStats.v {
+		burned, err := hexutil.DecodeBig(block.Burned)
+		if err != nil {
+			return fmt.Errorf("block.Burned was not a hex - %s", block.Burned)
+		}
+		totalBurned.Add(totalBurned, burned)
+
+		rewards, err := hexutil.DecodeBig(block.Rewards)
+		if err != nil {
+			return fmt.Errorf("block.Rewards was not a hex - %s", block.Rewards)
+		}
+		totalIssuance.Add(totalIssuance, rewards)
+		totalIssuance.Sub(totalIssuance, burned)
+
+		tips, err := hexutil.DecodeBig(block.Tips)
+		if err != nil {
+			return fmt.Errorf("block.Burned was not a hex - %s", block.Tips)
+		}
+		totalTips.Add(totalBurned, tips)
+	}
+	globalBlockStats.mu.Unlock()
+
+	globalTotalBurned.mu.Lock()
+	globalTotalBurned.v = totalBurned
+	globalTotalBurned.mu.Unlock()
+
+	globalTotalIssuance.mu.Lock()
+	globalTotalIssuance.v = totalIssuance
+	globalTotalIssuance.mu.Unlock()
+
+	globalTotalTips.mu.Lock()
+	globalTotalTips.v = totalTips
+	globalTotalTips.mu.Unlock()
+
+	duration := time.Since(start) / time.Millisecond
+
+	petaWei := big.NewInt(1_000_000_000_000_000)
+
+	burnedMilliEther := big.NewInt(0)
+	tipsMilliEther := big.NewInt(0)
+	issuanceMilliEther := big.NewInt(0)
+
+	burnedMilliEther.Quo(totalBurned, petaWei)
+	issuanceMilliEther.Quo(totalIssuance, petaWei)
+	tipsMilliEther.Quo(totalTips, petaWei)
+
+	log.Infof("total burned: %s mEth, issuance: %s mEth, tips: %s mEth (%d ms)", humanize.BigComma(burnedMilliEther), humanize.BigComma(issuanceMilliEther), humanize.BigComma(tipsMilliEther), duration)
+	//log.Infof("totals: %s burned, %s issuance, and %s tips (%d ms)", totalBurned.String(), totalIssuance.String(), totalTips.String(), duration)
+
+	return nil
 }
