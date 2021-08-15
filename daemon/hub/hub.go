@@ -1009,6 +1009,8 @@ func (h *Hub) updateBlockStats(blockNumber uint64, updateCache bool) (sql.BlockS
 
 	var allPriorityFeePerGasMwei []uint64
 
+	type2TransactionCount := int64(0)
+
 	for _, tHash := range block.Transactions {
 		var raw json.RawMessage
 		raw, err := h.rpcClient.CallContext(
@@ -1047,6 +1049,10 @@ func (h *Hub) updateBlockStats(blockNumber uint64, updateCache bool) (sql.BlockS
 			}
 		}
 
+		if receipt.Type == "0x2" {
+			type2TransactionCount++
+		}
+
 		burned := big.NewInt(0)
 		burned.Mul(gasUsed, baseFee)
 
@@ -1063,6 +1069,8 @@ func (h *Hub) updateBlockStats(blockNumber uint64, updateCache bool) (sql.BlockS
 		blockBurned.Add(blockBurned, burned)
 		blockTips.Add(blockTips, tips)
 	}
+
+	type2Count := big.NewInt(type2TransactionCount)
 
 	// sort slices that will be used for percentile calculations later
 	sort.Slice(allPriorityFeePerGasMwei, func(i, j int) bool { return allPriorityFeePerGasMwei[i] < allPriorityFeePerGasMwei[j] })
@@ -1094,13 +1102,14 @@ func (h *Hub) updateBlockStats(blockNumber uint64, updateCache bool) (sql.BlockS
 	blockStats.Rewards = hexutil.EncodeBig(&blockReward)
 	blockStats.Tips = hexutil.EncodeBig(blockTips)
 	blockStats.Transactions = hexutil.EncodeBig(transactionCount)
+	blockStats.Type2Transactions = hexutil.EncodeBig(type2Count)
 
 	globalBlockStats.mu.Lock()
 	globalBlockStats.v[blockNumber] = blockStats
 	globalBlockStats.mu.Unlock()
 
 	duration := time.Since(start) / time.Millisecond
-	log.Printf("block: %d, blockHex: %s, timestamp: %d, gas_target: %s, gas_used: %s, rewards: %s, tips: %s, baseFee: %s, burned: %s, transactions: %s, ptime: %dms", blockNumber, blockNumberHex, header.Time, gasTarget.String(), gasUsed.String(), blockReward.String(), blockTips.String(), baseFee.String(), blockBurned.String(), transactionCount.String(), duration)
+	log.Printf("block: %d, blockHex: %s, timestamp: %d, gas_target: %s, gas_used: %s, rewards: %s, tips: %s, baseFee: %s, burned: %s, transactions: %s, type2: %s, ptime: %dms", blockNumber, blockNumberHex, header.Time, gasTarget.String(), gasUsed.String(), blockReward.String(), blockTips.String(), baseFee.String(), blockBurned.String(), transactionCount.String(), type2Count.String(), duration)
 
 	return blockStats, blockStatsPercentiles, baseFeeNextHex, nil
 }
