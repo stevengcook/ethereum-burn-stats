@@ -915,19 +915,19 @@ func (s *Stats) updateAggregateTotals(blockNumber uint64) error {
 	}
 
 	//update monthly totals
-	startPeriod := beginningOfMonthTimeFromEpoch(epoch)
-	endPeriod := startPeriod.AddDate(0, 1, 0)
-	totals, err := s.getTotalsTimeDelta(uint64(startPeriod.Unix()), uint64(endPeriod.Unix()))
-	if err != nil {
-		log.Errorf("getTotalsTimeDelta(%d, %d): %v", startPeriod.Unix(), endPeriod.Unix(), err)
-		return err
-	}
-	s.totalsPerMonth.addPeriod(totals)
+	//startPeriod := beginningOfMonthTimeFromEpoch(epoch)
+	//endPeriod := startPeriod.AddDate(0, 1, 0)
+	//totals, err := s.getTotalsTimeDelta(uint64(startPeriod.Unix()), uint64(endPeriod.Unix()))
+	//if err != nil {
+	//	log.Errorf("getTotalsTimeDelta(%d, %d): %v", startPeriod.Unix(), endPeriod.Unix(), err)
+	//	return err
+	//}
+	//s.totalsPerMonth.addPeriod(totals)
 
 	//update daily totals
-	startPeriod = beginningOfDayTimeFromEpoch(epoch)
-	endPeriod = startPeriod.AddDate(0, 0, 1)
-	totals, err = s.getTotalsTimeDelta(uint64(startPeriod.Unix()), uint64(endPeriod.Unix()))
+	startPeriod := beginningOfDayTimeFromEpoch(epoch)
+	endPeriod := startPeriod.AddDate(0, 0, 1)
+	totals, err := s.getTotalsTimeDelta(uint64(startPeriod.Unix()), uint64(endPeriod.Unix()))
 	if err != nil {
 		log.Errorf("getTotalsTimeDelta(%d, %d): %v", startPeriod.Unix(), endPeriod.Unix(), err)
 		return err
